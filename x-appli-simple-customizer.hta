@@ -1,0 +1,361 @@
+﻿<HTML>
+<HEAD>
+    <hta:application
+        minimizebutton="no"
+        maximizebutton="no"
+        contextmenu="no"
+        sysmenu="yes"
+        selection="no"
+        version="1.0.0"
+        id="pathhta"
+    />
+    <TITLE>x-appli-simple-customizer</TITLE>
+<STYLE>
+p.discoveryzone-image-area {
+    background: url("http://xasc.users.sourceforge.net/images/x-appli-customize-im2.png") no-repeat;
+    display: block;
+    width:400px;
+    height:180px;
+}
+    button.small-button {
+        padding: 5px;
+        margin: 2px;
+    }
+    div.buttons {
+        text-align: right;
+    }
+</STYLE>
+<script type="text/javascript">
+
+
+var initWidth = 480;
+var initHeight = 600;
+var diffWidth = 0, diffHeight = 0;
+var agreed = false;
+var admin = false;
+var is64bit = true;
+var noApp = false;
+
+function init() {
+ var commandLine = pathhta.commandLine;
+ var m = commandLine.match(/\s*\"([^\"]*)\"\s+\"([^\"]*)\"/);
+ if (m && m[2]) {
+  var option = m[2];
+  var sizem = option.match(/^size=(\d+),(\d+),(\d+),(\d+)\&/);
+  if (sizem && sizem[4]) {
+   var left = parseInt(sizem[1], 10),
+    top = parseInt(sizem[2], 10),
+    width = parseInt(sizem[3], 10),
+    height = parseInt(sizem[4], 10);
+   initWidth = width;
+   initHeight = height;
+   window.resizeTo(width, height);
+   window.moveTo(left, top);
+  } else {
+   //alert("not sizem");
+  }
+  if (option.indexOf("agree=1") >= 0) {
+   agreed = true;
+  }
+  if (option.indexOf("admin=1") >= 0) {
+   admin = true;
+  }
+ } else {
+  window.resizeTo(480, 600);
+ }
+}
+
+function isUACEnv() {
+ var wmi = GetObject("winmgmts:\\\\.\\root\\cimv2");
+ var items = wmi.ExecQuery("Select * from Win32_OperatingSystem");
+ var e = new Enumerator(items);
+ for (; !e.atEnd() ; e.moveNext()) {
+  var item = e.item();
+  var version = "" + item.Version;
+  var simpleVersion = version.replace(/^(\d+)\.(\d+)\.(\d+)$/, "$1.$2");
+  var v = parseFloat(simpleVersion);
+  if (v >= 6.0) {
+   // Vista or lator (6.0: Vista, 6.1: Windows 7)
+   return true;
+  } else {
+   return false;
+  }
+ }
+ // Invalid status: fail safe
+ return true;
+}
+
+function main() {
+ if (!agreed && !admin) {
+  // version check
+  checkAppNewVersion();
+ }
+
+ diffWidth = (initWidth - document.body.clientWidth);
+ diffHeight = (initHeight - document.body.clientHeight);
+
+ if (admin) {
+  document.title = document.title + " (run as Adminstrator)";
+ }
+
+ var panel = document.getElementById("agree_panel");
+ if (admin && agreed) {
+  panel.style.display = "none";
+ }
+ document.getElementById("agreementButton").attachEvent("onclick", agree);
+ document.getElementById("exitButton").attachEvent("onclick", function () {
+  window.close();
+ });
+
+ var label = document.getElementById("flexible-discovery-zone-label");
+ var image = document.getElementById("discoveryzone-image");
+ label.attachEvent("onmouseenter", function () {
+  image.style.display = "none";
+ });
+ label.attachEvent("onmouseleave", function () {
+  image.style.display = "block";
+ });
+ setupControls();
+}
+
+function setupControls() {
+ var label = document.getElementById("flexible-discovery-zone-label");
+ var keepTabLabel = document.getElementById("keeptab-label");
+ var keepTabCheck = document.getElementById("keeptab-check");
+ var flexibleCheck = document.getElementById("flexible-check");
+ var applyButton = document.getElementById("applyButton");
+ 
+ label.detachEvent("onclick", showAgreeMessage);
+ keepTabLabel.detachEvent("onclick", showAgreeMessage);
+ keepTabCheck.detachEvent("onclick", showAgreeMessage);
+ flexibleCheck.detachEvent("onclick", showAgreeMessage);
+ applyButton.detachEvent("onclick", showAgreeMessage);
+ if (agreed) {
+  flexibleCheck.removeAttribute("disabled");
+  keepTabCheck.removeAttribute("disabled");
+  applyButton.attachEvent("onclick", applyFunc);
+ } else {
+  label.attachEvent("onclick", showAgreeMessage);
+  keepTabLabel.attachEvent("onclick", showAgreeMessage);
+  keepTabCheck.attachEvent("onclick", showAgreeMessage);
+  flexibleCheck.attachEvent("onclick", showAgreeMessage);
+  applyButton.attachEvent("onclick", showAgreeMessage);
+ }
+
+ if (!isUACEnv() || admin) {
+  var pEnable = getPortWindowEnable();
+  var pSplitterEnable = getPortWindowSplitterEnable();
+  if (!noApp) {
+   if (pEnable === 0) {
+    keepTabCheck.checked = false;
+   } else {
+    keepTabCheck.checked = true;
+   }
+   if (pSplitterEnable === 0) {
+    flexibleCheck.checked = false;
+   } else {
+    flexibleCheck.checked = true;
+   }
+  }
+
+ }
+
+}
+
+var t = 0;
+function applyFunc() {
+ var keepTabCheck = document.getElementById("keeptab-check");
+ var flexibleCheck = document.getElementById("flexible-check");
+ var v1 = 0, v2 = 0;
+ if (keepTabCheck.checked) {
+  v1 = 1;
+ }
+ if (flexibleCheck.checked) {
+  v2 = 1;
+ }
+ setPortWindowEnable(v1);
+ setPortWindowSplitterEnable(v2);
+
+ var panel = document.getElementById("result_area");
+ panel.innerText = "適用完了 (" + new Date() + ")";
+ clearTimeout(t);
+ t = setTimeout(function () {
+  panel.innerText = "";
+ }, 10000);
+}
+
+window.attachEvent("onload", main);
+init();
+
+function agree() {
+ if (isUACEnv()) {
+  uac_launch();
+ } else {
+  var panel = document.getElementById("agree_panel");
+  if (admin && agreed) {
+   panel.style.display = "none";
+  }
+  agree = true;
+  setupControls();
+ }
+}
+
+function showAgreeMessage() {
+ alert("最初に「同意する」をクリックしてください");
+}
+
+function uac_launch() {
+ option = "size=" + window.screenLeft + "," + window.screenTop + ","
+  + (document.body.clientWidth + diffWidth) + "," + (document.body.clientHeight + diffHeight);
+ option += "&admin=1&agree=1";
+ var shell = new ActiveXObject("Shell.Application");
+ shell.ShellExecute("mshta.exe", '"' + location.pathname + '" "' + option + '"', "", "runas", 1);
+}
+
+function launch() {
+ var shell = new ActiveXObject("Shell.Application");
+ shell.ShellExecute("mshta.exe", '"' + location.pathname + '" "a=b&c=d"', "", "open", 1);
+}
+
+function checkAppNewVersion() {
+ try {
+  var xhr = new ActiveXObject("MSXML2.XmlHttp");
+  var url = "http://xasc.users.sourceforge.net/latest/x-appli-simple-customizer.hta";
+  xhr.open("GET", url);
+  xhr.onreadystatechange = function () {
+   if (xhr.readyState == 4 && xhr.status == 200) {
+    extractVersion(xhr.responseText);
+   }
+  }
+  xhr.send(null);
+ } catch (e) {
+  // Ignore error
+ }
+}
+
+var shell = new ActiveXObject("WScript.Shell");
+function getPortWindowEnable() {
+ try {
+  var value = shell.RegRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable");
+  is64bit = true;
+  return value;
+ } catch (e) {
+  try {
+   var value = shell.RegRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable");
+   is64bit = false;
+   return value;
+  } catch (e2) {
+   noApp = true;
+  }
+ }
+ return null;
+}
+function getPortWindowSplitterEnable() {
+ try {
+  var value = shell.RegRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowSplitterEnable");
+  is64bit = true;
+  return value;
+ } catch (e) {
+  try {
+   var value = shell.RegRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Sony Corporation\\SonicStage V\\GUI\\PortWindowSplitterEnable");
+   is64bit = false;
+   return value;
+  } catch (e2) {
+   noApp = true;
+  }
+ }
+ return null;
+}
+function setPortWindowEnable(value) {
+ if (is64bit) {
+  shell.RegWrite("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable", value, "REG_DWORD");
+ } else {
+  shell.RegWrite("HKEY_LOCAL_MACHINE\\SOFTWARE\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable", value, "REG_DWORD");
+ }
+}
+function setPortWindowSplitterEnable(value) {
+ if (is64bit) {
+  shell.RegWrite("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowSplitterEnable", value, "REG_DWORD");
+ } else {
+  shell.RegWrite("HKEY_LOCAL_MACHINE\\SOFTWARE\\Sony Corporation\\SonicStage V\\GUI\\PortWindowSplitterEnable", value, "REG_DWORD");
+ }
+}
+
+function showRegistry() {
+ alert(shell.RegRead("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable"));
+ shell.RegWrite("HKEY_LOCAL_MACHINE\\SOFTWARE\\Wow6432Node\\Sony Corporation\\SonicStage V\\GUI\\PortWindowModeEnable", 1, "REG_DWORD");
+}
+
+function extractVersion(s) {
+ var m = s.match(/<hta:application[\s]*[^\/]*(version=\"([^\"]+)\")[^\/]*/i);
+ if (m) {
+  var vRemote = m[2];
+  var vLocal = pathhta.version;
+  if (compareVersions(vLocal, vRemote) < 0) {
+   var msg = "新しいバージョンがあります。ダウンロードページを表示しますね。\n"
+   + "今のバージョン: " + vLocal + "\n"
+   + "新しいバージョン: " + vRemote;
+   if (confirm(msg)) {
+    window.open("https://github.com/x-appli-simple-customizer/xasc/wiki");
+   }
+  }
+ }
+}
+
+/**
+ * Compare versions
+ * 
+ * @example:
+ * v1: "1.0.0", v2: "1.1.0" => complareVersions(v1, v2) => -1
+ */
+function compareVersions(v1, v2) {
+ var a1 = v1.match(/(\d+)\.(\d+)\.(\d+)(\.|$)/);
+ var a2 = v2.match(/(\d+)\.(\d+)\.(\d+)(\.|$)/);
+ if (a1 && a2) {
+  var a11 = parseInt(a1[1], 10);
+  var a21 = parseInt(a2[1], 10);
+  if (a11 !== a21) {
+   return a11 - a21;
+  }
+  var a12 = parseInt(a1[2], 10);
+  var a22 = parseInt(a2[2], 10);
+  if (a12 !== a22) {
+   return a12 - a22;
+  }
+  var a13 = parseInt(a1[3], 10);
+  var a23 = parseInt(a2[3], 10);
+  return a13 - a23;
+ } else {
+  return 0;
+ }
+}
+
+</script>
+
+</HEAD>
+<BODY>
+    <P id="agree_panel">
+        当ソフトの利用に際し起こった障害について、ソフト製作者は一切の責任を負いません。
+        ご利用には、自己責任での使用に同意することが必要です。<BR />
+        <BUTTON id="agreementButton" style="padding: 2px;">自己責任で当ソフトを利用することに同意します。</BUTTON>
+    </P>
+    <P class="discoveryzone-image-area">
+        <IMG id="discoveryzone-image" src="http://xasc.users.sourceforge.net/images/x-appli-customize-im1.png" />
+    </P>
+    <P>
+        <LABEL id="keeptab-label"><INPUT type="checkbox" id="keeptab-check" disabled/>ディスカバリーゾーンのタブを終了時の状態で保存する。</LABEL>
+    </P>
+    <P>
+        <LABEL id="flexible-discovery-zone-label"><INPUT type="checkbox" id="flexible-check" disabled />ディスカバリーゾーンのサイズを可変にする。(広告を隠す)</LABEL>
+    </P>
+    <P>
+        <DIV class="buttons">
+            <BUTTON id="applyButton" class="small-button">適用</BUTTON>
+            <BUTTON id="exitButton" class="small-button">終了</BUTTON>
+        </DIV>
+    </P>
+    <P id="result_area">
+    </P>
+    <P><A href="https://github.com/x-appli-simple-customizer/xasc/wiki">x-appli-simple-customizer web</A></P>
+</BODY>
+</HTML>
