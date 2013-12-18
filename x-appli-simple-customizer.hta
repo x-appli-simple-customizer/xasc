@@ -38,9 +38,13 @@ var noApp = false;
 
 function init() {
  var commandLine = pathhta.commandLine;
- var m = commandLine.match(/\s*\"([^\"]*)\"\s+\"([^\"]*)\"/);
+ var m = commandLine.match(/\s*\"([^\"]*)\"\s+\"([^\"]*)\"(\s+\"([^\"]*)\")/);
  if (m && m[2]) {
   var option = m[2];
+  var launchFile = m[4];
+  if (launchFile) {
+   setLaunchedByFile(launchFile);
+  }
   var sizem = option.match(/^size=(\d+),(\d+),(\d+),(\d+)\&/);
   if (sizem && sizem[4]) {
    var left = parseInt(sizem[1], 10),
@@ -83,6 +87,18 @@ function isUACEnv() {
  }
  // Invalid status: fail safe
  return true;
+}
+
+function setLaunchedByFile(filePath) {
+ var fso = new ActiveXObject("Scripting.FileSystemObject");
+ var f = fso.CreateTextFile(filePath, true);
+ f.WriteLine("launched " + new Date());
+ f.Close();
+ setTimeout(function () {
+  if (fso.FileExists(filePath)) {
+   fso.DeleteFile(filePath);
+  }
+ }, 5000);
 }
 
 function main() {
@@ -204,12 +220,47 @@ function showAgreeMessage() {
  alert("最初に「同意する」をクリックしてください");
 }
 
+function getTempFilePath() {
+ var TemporaryFolder = 2;
+ var fso = new ActiveXObject("Scripting.FileSystemObject");
+ var dir = fso.GetSpecialFolder(TemporaryFolder);
+ for (var i = 0; i < 20; i++) {
+  var f = fso.BuildPath(dir, fso.GetTempName());
+  if (!fso.FileExists(f)) {
+   return f;
+  }
+ }
+ return "temp.tmp";
+}
+
+function startTerminatorLoop(filePath) {
+ var fso = new ActiveXObject("Scripting.FileSystemObject");
+ var startTime = new Date().getTime();
+ var check = function () {
+  if (fso.FileExists(filePath)) {
+   setTimeout(function () {
+    window.close();
+   }, 100);
+   return;
+  }
+  if (startTime + 60 * 1000 < new Date().getTime()) {
+   // After 60 seconds
+   // Terminator loop end
+  } else {
+   setTimeout(check, 100);
+  }
+ }
+ check();
+}
+
 function uac_launch() {
+ var launchFile = getTempFilePath();
  option = "size=" + window.screenLeft + "," + window.screenTop + ","
   + (document.body.clientWidth + diffWidth) + "," + (document.body.clientHeight + diffHeight);
  option += "&admin=1&agree=1";
  var shell = new ActiveXObject("Shell.Application");
- shell.ShellExecute("mshta.exe", '"' + location.pathname + '" "' + option + '"', "", "runas", 1);
+ shell.ShellExecute("mshta.exe", '"' + location.pathname + '" "' + option + '" "' + launchFile + '"', "", "runas", 1);
+ startTerminatorLoop(launchFile);
 }
 
 function launch() {
@@ -220,7 +271,7 @@ function launch() {
 function checkAppNewVersion() {
  try {
   var xhr = new ActiveXObject("MSXML2.XmlHttp");
-  var url = "http://xasc.users.sourceforge.net/latest/x-appli-simple-customizer.hta";
+  var url = "http://xasc.users.sourceforge.net/latest/x-appli-simple-customizer.hta" + "?_=" + new Date().getDate();
   xhr.open("GET", url);
   xhr.onreadystatechange = function () {
    if (xhr.readyState == 4 && xhr.status == 200) {
